@@ -12,6 +12,8 @@ func main() {
 
 	if len(os.Args) > 1 && os.Args[1] == "--server" {
 		mode = "server"
+	} else if len(os.Args) > 1 && os.Args[1] == "--local" {
+	        mode = "local"
 	} else if len(os.Args) > 1 && os.Args[1] == "--help" {
 		mode = "help"
 	}
@@ -20,6 +22,9 @@ func main() {
 	case "server":
 		ip, port, sslCrt, sslKey := ParseServerFlags(os.Args[2:])
 		RunServer(ip, port, sslCrt, sslKey, false)
+	case "local":
+                ip, port, rootPath := ParseLocalFlags(os.Args[2:])
+                RunLocal(ip, port, rootPath)
 	case "client":
 		url, userKey, rootPath := ParseClientFlags(os.Args[1:])
 		id := strings.Replace(uuid.New(), "-", "", -1)
