@@ -2,8 +2,6 @@ package main
 
 import (
         "bytes"
-        "code.google.com/p/go.net/websocket"
-        "encoding/json"
         "flag"
         "fmt"
         "net/http"
@@ -88,72 +86,6 @@ func (self *LocalWebFSHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
         }
 }
 
-
-func localEditorSocketServer(ws *websocket.Conn) {
-        fmt.Println("websocket handler")
-        defer ws.Close()
-        buffer := make([]byte, BUFFER_SIZE)
-        n, err := ws.Read(buffer)
-        var hello HelloMessage
-        err = json.Unmarshal(buffer[:n], &hello)
-        if err != nil {
-                fmt.Println("Could not parse welcome message.")
-                return
-        }
-
-        fmt.Println("Edit client", hello.UUID, "connected")
-
-        client := GetEditorClientChannel(hello.UUID)
-        clientChan := client.NewChannel()
-
-        closed := false
-
-        closeSocket := func() {
-                if closed {
-                        return
-                }
-                closed = true
-                fmt.Println("Client disconnected", hello.UUID)
-                client.DisconnectChannel(clientChan)
-        }
-
-        defer closeSocket()
-
-        go func() {
-                for {
-                        buf := make([]byte, 1024)
-                        n, err := ws.Read(buf)
-                        if err != nil {
-                                closeSocket()
-                                return
-                        }
-                        var message EditSocketMessage
-                        err = json.Unmarshal(buf[:n], &message)
-                        if message.MessageType == "ping" {
-                                ws.Write(pongBuff)
-                        }
-                }
-
-        }()
-
-        for {
-                url, request_ok := <-clientChan
-                if !request_ok {
-                        return
-                }
-                messageBuf, err := json.Marshal(EditSocketMessage{"open", url})
-                if err != nil {
-                        fmt.Println("Couldn't serialize URL")
-                        continue
-                }
-                _, err = ws.Write(messageBuf)
-                if err != nil {
-                        fmt.Println("Got error", err)
-                        return
-                }
-        }
-}
-
 func ParseLocalFlags(args []string) (ip string, port int, rootPath string) {
         config := ParseConfig()
 
@@ -176,17 +108,11 @@ func ParseLocalFlags(args []string) (ip string, port int, rootPath string) {
 func RunLocal(ip string, port int, rootPath string) {
         rootPath, _ = filepath.Abs(rootPath)
 
-        url := fmt.Sprintf("ws://%s:%d", ip, port)
+        url := fmt.Sprintf("http://%s:%d", ip, port)
         fmt.Printf("Zedrem server running on %s, rootPath=%s\n", url, rootPath)
-
-        connectUrl := strings.Replace(url, "ws://", "http://", 1)
-        connectUrl = strings.Replace(connectUrl, "wss://", "https://", 1)
-
         fmt.Println("Press Ctrl-c to quit.")
 
         handler := RootedRPCHandler{rootPath}
-        //http.Handle("/fs/", http.StripPrefix("/fs/", &LocalWebFSHandler{rootPath}))
         http.Handle("/", &LocalWebFSHandler{&handler})
-        //http.Handle("/editorsocket", websocket.Handler(localEditorSocketServer))
         http.ListenAndServe(fmt.Sprintf("%s:%d", ip, port), nil)
 }
